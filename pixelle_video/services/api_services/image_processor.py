@@ -18,7 +18,7 @@ class ImageProcessor:
     
     def __init__(self,
                  image_path='',
-                 api_key: str = "sk-bcab316d69a7414faa9dc29737019333",
+                 api_key: str | None = None,
                  model_name: str = "wan2.6-i2v-flash",
                  local_proxy: str | None = None):
         """
@@ -44,6 +44,11 @@ class ImageProcessor:
         
         # 上传功能部分
         self.api_key = api_key or os.getenv("DASHSCOPE_API_KEY")
+        if not self.api_key:
+            raise ValueError(
+                "DashScope API key is required: pass api_key or set "
+                "the DASHSCOPE_API_KEY environment variable."
+            )
         self.model_name = model_name
         self.local_proxy = local_proxy
 
@@ -147,10 +152,7 @@ class ImageProcessor:
             max_retries: 最大重试次数
         """
         import time
-        import urllib3
-        
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        
+
         for attempt in range(max_retries):
             try:
                 response = requests.get(
@@ -181,28 +183,8 @@ class ImageProcessor:
                     print(f"等待 {wait_time} 秒后重试...")
                     time.sleep(wait_time)
                 else:
-                    print("尝试禁用SSL验证重新下载...")
-                    try:
-                        response = requests.get(
-                            image_url, 
-                            timeout=(10, 30),
-                            stream=True,
-                            verify=False,
-                            proxies=self._proxies(),
-                            headers={
-                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                            }
-                        )
-                        if response.status_code == 200:
-                            with open(save_path, 'wb') as file:
-                                for chunk in response.iter_content(chunk_size=8192):
-                                    if chunk:
-                                        file.write(chunk)
-                            print(f"✓ 图片下载成功(已禁用SSL验证): {save_path}")
-                            return True
-                    except Exception as fallback_error:
-                        print(f"禁用SSL验证后仍然失败: {fallback_error}")
-                        raise
+                    # Fail closed: never disable TLS verification.
+                    raise
                         
             except requests.exceptions.Timeout as e:
                 print(f"超时错误 (尝试 {attempt + 1}/{max_retries}): {e}")
